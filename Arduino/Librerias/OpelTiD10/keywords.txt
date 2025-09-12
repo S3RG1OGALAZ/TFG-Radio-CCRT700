@@ -1,0 +1,6 @@
+TID10	KEYWORD1
+display_message	KEYWORD2
+clear_message	KEYWORD2
+display_symbol	KEYWORD2
+clear_symbol	KEYWORD2
+clear_all_symbols	KEYWORD2
