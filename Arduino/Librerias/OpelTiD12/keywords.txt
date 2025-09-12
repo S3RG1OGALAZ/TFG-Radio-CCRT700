@@ -1,0 +1,12 @@
+TID	KEYWORD1
+display_message	KEYWORD2
+reset_pos	KEYWORD2
+space1_init	KEYWORD2
+space2_init	KEYWORD2
+space3_init	KEYWORD2
+display_symbol	KEYWORD2
+clear_symbol	KEYWORD2
+reset_pos		KEYWORD2
+clear_all_symbols	KEYWORD2
+bargraph	KEYWORD2
+clear_space KEYWORD2
