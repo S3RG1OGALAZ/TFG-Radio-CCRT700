@@ -7,12 +7,32 @@ TID pantalla(11, 9, 10);            // Pines SDA, SCL, MRQ de conexion con la pa
 GestorEntradas gestorEntradas;      // Control del panel frotal del CCRT700
 BT201 moduloBt(Serial1);            //
 
+/*
+  Modos de audio contemplados por la prueba de concepto.
+
+  El modo radio representa por ahora el cambio de modo solicitado por el
+  usuario. La recepcion FM real se incorporara al integrar el RDA5807.
+*/
+enum ModoAudio {
+  MODO_BLUETOOTH,
+  MODO_RADIO
+};
+
+ModoAudio modoAudioActual = MODO_BLUETOOTH;
+
 String ultimoTextoPantalla = "";              // Texto que se esta mostrando actualmente en pantalla.
 bool estadoConexionAnteriorRecibido = false;  // Indica la referencia anterior del estado de conexion
 bool estabaConectadoAnteriormente = false;    // Guarda si en la ultima comprobacion el Bluetooth estaba conectado
 String mensajeTemporalPantalla = "";          // Texto temporal
 unsigned long inicioMensajeTemporal = 0;             // Momento en el que empezo a mostrarse el mensaje temporal
 const unsigned long duracionMensajeTemporal = 1500;   // Tiempo que se mostrara el mensaje temporal antes de volver al estado normal
+
+// Declaraciones de las funciones utilizadas por la aplicacion principal.
+void cambiarModoAudio();
+void mostrarMensajeTemporal(const String& mensaje);
+bool bluetoothEstaConectado(BT201::EstadoBt estado);
+bool bluetoothPermiteControlMusica();
+void actualizarPantalla();
 
 void setup() {
   Serial.begin(9600);                       // Inicia comunicacion serie para debug
@@ -44,10 +64,26 @@ void loop() {
     No consulta AT+TS.
     Solo usa el estado que ya haya recibido el modulo.
   */
-  actualizarPantallaBluetooth();
+  actualizarPantalla();
 
   if (gestorEntradas.fuePulsado(BOTON_CINTA)) {
-    moduloBt.reproducirPausar();
+    if (bluetoothPermiteControlMusica()) {
+      moduloBt.reproducirPausar();
+    }
+  }
+
+  if (gestorEntradas.fuePulsado(BOTON_SINTONIZADOR)) {
+    if (bluetoothPermiteControlMusica()) {
+      moduloBt.pistaSiguiente();
+      mostrarMensajeTemporal("NEXT    ");
+    }
+  }
+
+  if (gestorEntradas.fuePulsado(BOTON_EQUALIZADOR)) {
+    if (bluetoothPermiteControlMusica()) {
+      moduloBt.pistaAnterior();
+      mostrarMensajeTemporal("PREV    ");
+    }
   }
 
   if (gestorEntradas.fuePulsado(BOTON_SOS)) {
@@ -55,8 +91,35 @@ void loop() {
   }
 
   if (gestorEntradas.fuePulsado(BOTON_CD)) {
-    Serial.println("CD pulsado");
+    cambiarModoAudio();
   }
+}
+
+/*
+  Cambia entre los modos contemplados por la prueba de concepto.
+
+  El cambio a radio genera el estado y la respuesta visual necesarios para
+  validar RF_V1. No activa todavia un receptor FM fisico.
+*/
+void cambiarModoAudio() {
+  if (modoAudioActual == MODO_BLUETOOTH) {
+    modoAudioActual = MODO_RADIO;
+    mostrarMensajeTemporal("RADIO   ");
+  } else {
+    modoAudioActual = MODO_BLUETOOTH;
+    mostrarMensajeTemporal("BT      ");
+  }
+}
+
+/*
+  Muestra un texto durante un tiempo limitado sin bloquear el loop.
+*/
+void mostrarMensajeTemporal(const String& mensaje) {
+  mensajeTemporalPantalla = mensaje;
+  inicioMensajeTemporal = millis();
+
+  pantalla.display_message(mensajeTemporalPantalla, 255, 1);
+  ultimoTextoPantalla = mensajeTemporalPantalla;
 }
 
 /*
@@ -78,6 +141,22 @@ bool bluetoothEstaConectado(BT201::EstadoBt estado) {
 }
 
 /*
+  Indica si se pueden enviar ordenes de reproduccion al BT201.
+
+  Se evita mostrar NEXT o PREV cuando el modulo no esta conectado, esta en
+  emparejamiento o se encuentra gestionando una llamada.
+*/
+bool bluetoothPermiteControlMusica() {
+  if (modoAudioActual != MODO_BLUETOOTH || !moduloBt.estadoRecibido()) {
+    return false;
+  }
+
+  BT201::EstadoBt estado = moduloBt.obtenerEstado();
+  return estado == BT201::BT_CONECTADO ||
+         estado == BT201::BT_REPRODUCIENDO;
+}
+
+/*
   Actualiza la pantalla segun el estado Bluetooth.
 
   Funcionamiento:
@@ -86,7 +165,33 @@ bool bluetoothEstaConectado(BT201::EstadoBt estado) {
   3. Si hay cambio, muestra un mensaje temporal.
   4. Cuando termina el mensaje temporal, vuelve a mostrar el estado normal.
 */
-void actualizarPantallaBluetooth() {
+void actualizarPantalla() {
+  /*
+    Los mensajes temporales tienen prioridad independientemente del modo.
+  */
+  if (mensajeTemporalPantalla.length() > 0) {
+    if ((millis() - inicioMensajeTemporal) < duracionMensajeTemporal) {
+      return;
+    }
+
+    mensajeTemporalPantalla = "";
+  }
+
+  /*
+    El receptor FM aun no esta integrado. Se mantiene visible el modo logico
+    para validar el cambio de modo sin mostrar un estado Bluetooth incorrecto.
+  */
+  if (modoAudioActual == MODO_RADIO) {
+    String textoModo = "RADIO   ";
+
+    if (textoModo != ultimoTextoPantalla) {
+      pantalla.display_message(textoModo, 255, 1);
+      ultimoTextoPantalla = textoModo;
+    }
+
+    return;
+  }
+
   /*
     Primero se comprueba si ya se ha recibido algun estado real del BT201.
 
@@ -137,28 +242,9 @@ void actualizarPantallaBluetooth() {
       mensajeTemporalPantalla = "DISCNCTD";
     }
 
-    inicioMensajeTemporal = millis();
-
-    pantalla.display_message(mensajeTemporalPantalla, 255, 1);
-    ultimoTextoPantalla = mensajeTemporalPantalla;
+    mostrarMensajeTemporal(mensajeTemporalPantalla);
 
     return;
-  }
-
-  /*
-    Si hay un mensaje temporal activo, se mantiene hasta que pase
-    duracionMensajeTemporal.
-  */
-  if (mensajeTemporalPantalla.length() > 0) {
-    if ((millis() - inicioMensajeTemporal) < duracionMensajeTemporal) {
-      return;
-    }
-
-    /*
-      Cuando termina el tiempo del mensaje temporal, se limpia para volver
-      al estado normal.
-    */
-    mensajeTemporalPantalla = "";
   }
 
   /*

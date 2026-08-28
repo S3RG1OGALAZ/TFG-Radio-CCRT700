@@ -74,6 +74,20 @@ void BT201::reproducirPausar() {
 }
 
 /*
+  Envia al modulo Bluetooth el comando de pista siguiente.
+*/
+void BT201::pistaSiguiente() {
+  enviarComando("AT+CC");
+}
+
+/*
+  Envia al modulo Bluetooth el comando de pista anterior.
+*/
+void BT201::pistaAnterior() {
+  enviarComando("AT+CD");
+}
+
+/*
   Indica si hay un evento nuevo pendiente de consumir.
 
   Devuelve true si se ha recibido un nuevo estado o mensaje del modulo.

@@ -74,6 +74,16 @@ public:
   */
   void reproducirPausar();
 
+  /*
+    Envia al modulo el comando para reproducir la pista siguiente.
+  */
+  void pistaSiguiente();
+
+  /*
+    Envia al modulo el comando para reproducir la pista anterior.
+  */
+  void pistaAnterior();
+
   // Eventos
 
   /*
